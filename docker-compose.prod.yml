@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Node.js сервер
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: production
+    container_name: my-chat-server-prod
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    env_file:
+      - ./server/.env.prod
+    networks:
+      - my-chat-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # React клиент (продакшн версия с nginx)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: my-chat-client-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - my-chat-network
+    depends_on:
+      - server
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx reverse proxy для продакшна
+  nginx:
+    image: nginx:alpine
+    container_name: my-chat-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - my-chat-network
+    depends_on:
+      - client
+      - server
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  my-chat-network:
+    driver: bridge
